@@ -1,0 +1,93 @@
+import unittest
+
+from engine import enumerator
+
+
+class EnumeratorHardeningTests(unittest.TestCase):
+    def test_classify_rate_limited_as_uncertain(self):
+        exists, status, confidence, method = enumerator._classify_response(
+            platform='X',
+            status_code=429,
+            response_text='',
+            is_variant=False,
+        )
+        self.assertFalse(exists)
+        self.assertEqual(status, 'Uncertain')
+        self.assertEqual(confidence, 'Low')
+        self.assertEqual(method, 'rate-limited')
+
+    def test_classify_not_found_marker(self):
+        response = "This account doesn't exist. Try searching for another."
+        exists, status, confidence, method = enumerator._classify_response(
+            platform='X',
+            status_code=200,
+            response_text=response.lower(),
+            is_variant=False,
+        )
+        self.assertFalse(exists)
+        self.assertEqual(status, 'Not Found')
+        self.assertEqual(confidence, 'Low')
+        self.assertEqual(method, 'marker')
+
+    def test_summary_counts_found_not_found_uncertain(self):
+        original_checker = enumerator.real_platform_check
+
+        def fake_checker(username, platform, is_variant=False):
+            if platform == 'GitHub':
+                return enumerator.PlatformCheck(
+                    platform=platform,
+                    url=f'https://github.com/{username}',
+                    exists=True,
+                    confidence='High',
+                    status='Found',
+                    http_status=200,
+                    response_time_ms=12.0,
+                    detection_method='http-status',
+                    error=''
+                )
+            if platform == 'X':
+                return enumerator.PlatformCheck(
+                    platform=platform,
+                    url=f'https://x.com/{username}',
+                    exists=False,
+                    confidence='Low',
+                    status='Uncertain',
+                    http_status=429,
+                    response_time_ms=30.0,
+                    detection_method='rate-limited',
+                    error='http_error_429'
+                )
+            return enumerator.PlatformCheck(
+                platform=platform,
+                url=f'https://reddit.com/user/{username}',
+                exists=False,
+                confidence='Low',
+                status='Not Found',
+                http_status=404,
+                response_time_ms=20.0,
+                detection_method='http-status',
+                error=''
+            )
+
+        try:
+            enumerator.real_platform_check = fake_checker
+            results = enumerator.check_username_across_platforms(
+                username='cat3lyst',
+                platforms_to_check=['GitHub', 'X', 'Reddit'],
+                check_variants=False,
+            )
+        finally:
+            enumerator.real_platform_check = original_checker
+
+        summary = results['summary']
+        self.assertEqual(summary['total_checks'], 3)
+        self.assertEqual(summary['matches_found'], 1)
+        self.assertEqual(summary['found_count'], 1)
+        self.assertEqual(summary['uncertain_count'], 1)
+        self.assertEqual(summary['not_found_count'], 1)
+        self.assertEqual(summary['network_errors'], 1)
+        self.assertGreater(summary['avg_response_time_ms'], 0)
+
+
+if __name__ == '__main__':
+    unittest.main()

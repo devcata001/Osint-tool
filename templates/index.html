@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trace Handle - Username & Email Intelligence</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <h1 class="title">Trace Handle</h1>
+        <p class="subtitle">
+          Fast, minimal intelligence for username & email enumeration
+        </p>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Input Section -->
+        <section class="input-section">
+          <form id="osintForm" class="form">
+            <!-- Input Type Selection -->
+            <div class="input-type-group">
+              <label class="radio-label">
+                <input
+                  type="radio"
+                  name="input_type"
+                  value="username"
+                  checked
+                />
+                <span>Username</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="input_type" value="email" />
+                <span>Email</span>
+              </label>
+            </div>
+
+            <!-- Input Field -->
+            <div class="input-field-group">
+              <input
+                type="text"
+                id="inputField"
+                class="input-field"
+                placeholder="Enter username or email..."
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <button type="submit" class="btn-check">Check</button>
+            </div>
+
+            <!-- Helper Text -->
+            <p id="helperText" class="helper-text">
+              Enter a username to check across platforms (GitHub, X, Reddit,
+              Instagram, Telegram, etc.)
+            </p>
+          </form>
+        </section>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading hidden">
+          <div class="spinner"></div>
+          <p>Checking across platforms...</p>
+        </div>
+
+        <!-- Results Section -->
+        <section id="resultsSection" class="results-section hidden">
+          <!-- Summary -->
+          <div id="summary" class="summary"></div>
+
+          <!-- Results Table -->
+          <div id="resultsTable" class="results-table-wrapper"></div>
+
+          <!-- Recommendations -->
+          <div id="recommendations" class="recommendations"></div>
+
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <button id="copyBtn" class="btn-secondary">Copy Results</button>
+            <button id="resetBtn" class="btn-secondary">New Search</button>
+          </div>
+        </section>
+
+        <!-- Error Section -->
+        <section id="errorSection" class="error-section hidden">
+          <div class="error-box">
+            <h3>Error</h3>
+            <p id="errorMessage"></p>
+          </div>
+        </section>
+
+        <!-- Info Section (when no search performed) -->
+        <section id="infoSection" class="info-section">
+          <div class="info-card">
+            <h3>🔍 What does this tool do?</h3>
+            <ul>
+              <li>
+                <strong>Username Check:</strong> Search across major platforms
+                (GitHub, X, Reddit, Instagram, Telegram) and generate smart
+                variants
+              </li>
+              <li>
+                <strong>Email Check:</strong> Verify if email appears in known
+                data breaches
+              </li>
+            </ul>
+          </div>
+          <div class="info-card">
+            <h3>⚡ Features</h3>
+            <ul>
+              <li>Fast, minimal single-page interface</li>
+              <li>Confidence scoring for accuracy</li>
+              <li>Variant generation (username_dev, username01, etc.)</li>
+              <li>Comprehensive breach database coverage</li>
+              <li>Risk assessment and recommendations</li>
+            </ul>
+          </div>
+          <div class="info-card">
+            <h3>🛡️ Privacy & Security</h3>
+            <ul>
+              <li>Searches are not logged</li>
+              <li>No cookies or tracking</li>
+              <li>All processing local to your request</li>
+              <li>HTTPS recommended for sensitive data</li>
+            </ul>
+          </div>
+        </section>
+      </main>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <p>Trace Handle v1.0 | Production-ready security intelligence tool</p>
+      </footer>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip hidden"></div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  </body>
+</html>
