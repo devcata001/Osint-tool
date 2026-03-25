@@ -4,6 +4,29 @@ from engine import enumerator
 
 
 class EnumeratorHardeningTests(unittest.TestCase):
+    def test_classify_instagram_ambiguous_200_as_uncertain(self):
+        exists, status, confidence, method = enumerator._classify_response(
+            platform='Instagram',
+            status_code=200,
+            response_text='sign up • instagram',
+            is_variant=False,
+        )
+        self.assertFalse(exists)
+        self.assertEqual(status, 'Uncertain')
+        self.assertEqual(confidence, 'Low')
+        self.assertEqual(method, 'ambiguous-200')
+
+    def test_classify_github_200_as_found(self):
+        exists, status, confidence, method = enumerator._classify_response(
+            platform='GitHub',
+            status_code=200,
+            response_text='repositories followers following',
+            is_variant=False,
+        )
+        self.assertTrue(exists)
+        self.assertEqual(status, 'Found')
+        self.assertIn(method, {'marker', 'http-status'})
+
     def test_classify_rate_limited_as_uncertain(self):
         exists, status, confidence, method = enumerator._classify_response(
             platform='X',

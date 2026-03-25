@@ -105,13 +105,17 @@ NOT_FOUND_MARKERS = {
 }
 
 FOUND_MARKERS = {
-    'X': ['@'],
+    'X': [],
     'Instagram': ['profile', 'followers', 'following'],
     'Telegram': ['if you have telegram'],
     'GitHub': ['repositories', 'followers', 'following'],
     'Reddit': ['karma', 'cake day'],
     'HackerNews': ['created:']
 }
+
+# Platforms where a plain HTTP 200 is not reliable evidence of account existence
+# because they often return generic/login pages for missing profiles.
+CONSERVATIVE_200_PLATFORMS = {'Instagram', 'X', 'LinkedIn', 'Facebook', 'Telegram'}
 
 REQUEST_HEADERS = {
     'User-Agent': (
@@ -324,11 +328,15 @@ def _classify_response(platform: str, status_code: int, response_text: str, is_v
 
     markers_found = [marker.replace('’', "'").lower() for marker in FOUND_MARKERS.get(platform, [])]
     for marker in markers_found:
+        if len(marker.strip()) < 3:
+            continue
         if marker and marker in text:
             confidence = 'High' if not is_variant else 'Medium'
             return True, 'Found', confidence, 'marker'
 
     if status_code == 200:
+        if platform in CONSERVATIVE_200_PLATFORMS:
+            return False, 'Uncertain', 'Low', 'ambiguous-200'
         confidence = 'High' if not is_variant else 'Medium'
         return True, 'Found', confidence, 'http-status'
 
