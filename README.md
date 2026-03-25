@@ -10,6 +10,7 @@ A fast, minimal, engineer-level OSINT checker for username, email, and phone enu
 - Automatic variant generation (username_dev, username01, underscore replacements, etc.)
 - Confidence scoring for accuracy assessment
 - Fast platform probing
+- Signature-driven platform checks (`engine/platform_signatures.json`) for stricter, data-driven matching
 
 📧 **Email Breach Checking**
 
@@ -101,6 +102,18 @@ For production deployment, use a production WSGI server:
 pip install gunicorn
 gunicorn -w 4 -b 0.0.0.0:5000 app:create_app
 ```
+
+## Platform Signature Tuning (WhatsMyName-style)
+
+Username platform detection is configured in [engine/platform_signatures.json](engine/platform_signatures.json).
+
+Each platform supports:
+
+- `conservative_200`: if `true`, plain HTTP `200` is treated as `Uncertain` unless strong markers/evidence exist.
+- `not_found_markers`: phrases that indicate the profile does **not** exist.
+- `found_markers`: phrases that indicate a likely real profile page.
+
+This keeps checks data-driven and allows quick accuracy tuning per platform without changing Python code.
 
 Or with environment configuration:
 

@@ -1,0 +1,42 @@
+{
+  "GitHub": {
+    "conservative_200": false,
+    "not_found_markers": ["not found"],
+    "found_markers": ["repositories", "followers", "following"]
+  },
+  "X": {
+    "conservative_200": true,
+    "not_found_markers": ["this account doesn't exist", "try searching for another"],
+    "found_markers": []
+  },
+  "Reddit": {
+    "conservative_200": true,
+    "not_found_markers": ["sorry, nobody on reddit goes by that name", "page not found"],
+    "found_markers": ["karma", "cake day"]
+  },
+  "Instagram": {
+    "conservative_200": true,
+    "not_found_markers": ["sorry, this page isn't available", "page isn't available"],
+    "found_markers": ["profile", "followers", "following"]
+  },
+  "Telegram": {
+    "conservative_200": true,
+    "not_found_markers": [],
+    "found_markers": ["if you have telegram", "telegram: contact @"]
+  },
+  "LinkedIn": {
+    "conservative_200": true,
+    "not_found_markers": ["profile not found", "this page doesn't exist"],
+    "found_markers": []
+  },
+  "Facebook": {
+    "conservative_200": true,
+    "not_found_markers": ["this content isn't available", "page not found"],
+    "found_markers": []
+  },
+  "HackerNews": {
+    "conservative_200": false,
+    "not_found_markers": ["no such user"],
+    "found_markers": ["created:"]
+  }
+}

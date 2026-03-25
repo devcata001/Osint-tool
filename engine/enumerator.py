@@ -5,8 +5,10 @@ Provides resilient, production-oriented probing with retries and classification.
 
 import time
 import os
+import json
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, replace
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.request import Request, urlopen, build_opener, ProxyHandler
 from urllib.error import HTTPError, URLError
@@ -70,51 +72,51 @@ PLATFORMS = {
     },
 }
 
-NOT_FOUND_MARKERS = {
-    'X': [
-        "this account doesn\'t exist",
-        "this account doesn't exist",
-        'try searching for another'
-    ],
-    'Instagram': [
-        "sorry, this page isn't available",
-        'page isn\'t available'
-    ],
-    'GitHub': [
-        'not found'
-    ],
-    'Reddit': [
-        'sorry, nobody on reddit goes by that name',
-        'page not found'
-    ],
-    'LinkedIn': [
-        'profile not found',
-        'this page doesn\'t exist'
-    ],
-    'Facebook': [
-        "this content isn't available",
-        'page not found'
-    ],
-    'Telegram': [
-        'if you have telegram, you can contact'
-    ],
-    'HackerNews': [
-        'no such user'
-    ]
+DEFAULT_PLATFORM_SIGNATURES = {
+    'GitHub': {
+        'conservative_200': False,
+        'not_found_markers': ['not found'],
+        'found_markers': ['repositories', 'followers', 'following']
+    },
+    'X': {
+        'conservative_200': True,
+        'not_found_markers': [
+            "this account doesn't exist",
+            'try searching for another'
+        ],
+        'found_markers': []
+    },
+    'Reddit': {
+        'conservative_200': False,
+        'not_found_markers': ['sorry, nobody on reddit goes by that name', 'page not found'],
+        'found_markers': ['karma', 'cake day']
+    },
+    'Instagram': {
+        'conservative_200': True,
+        'not_found_markers': ["sorry, this page isn't available", "page isn't available"],
+        'found_markers': ['profile', 'followers', 'following']
+    },
+    'Telegram': {
+        'conservative_200': True,
+        'not_found_markers': [],
+        'found_markers': ['if you have telegram']
+    },
+    'LinkedIn': {
+        'conservative_200': True,
+        'not_found_markers': ['profile not found', "this page doesn't exist"],
+        'found_markers': []
+    },
+    'Facebook': {
+        'conservative_200': True,
+        'not_found_markers': ["this content isn't available", 'page not found'],
+        'found_markers': []
+    },
+    'HackerNews': {
+        'conservative_200': False,
+        'not_found_markers': ['no such user'],
+        'found_markers': ['created:']
+    }
 }
-
-FOUND_MARKERS = {
-    'X': [],
-    'Instagram': ['profile', 'followers', 'following'],
-    'Telegram': ['if you have telegram'],
-    'GitHub': ['repositories', 'followers', 'following'],
-    'Reddit': ['karma', 'cake day'],
-    'HackerNews': ['created:']
-}
-
-# Platforms where a plain HTTP 200 is not reliable evidence of account existence
-# because they often return generic/login pages for missing profiles.
-CONSERVATIVE_200_PLATFORMS = {'Instagram', 'X', 'LinkedIn', 'Facebook', 'Telegram'}
 
 REQUEST_HEADERS = {
     'User-Agent': (
@@ -129,9 +131,52 @@ REQUEST_TIMEOUT_SECONDS = 8
 MAX_RETRIES = 2
 BACKOFF_SECONDS = 0.35
 CACHE_TTL_SECONDS = 300
+RESPONSE_PREVIEW_BYTES = 900000
+TEMPLATE_COMPARE_WINDOW = 10000
 
 _RESULT_CACHE: Dict[Tuple[str, str], Tuple[float, PlatformCheck]] = {}
 _PROXY_OPENER = None
+
+
+def _load_platform_signatures() -> Dict[str, Dict[str, object]]:
+    """Load signature definitions from JSON; fall back to defaults on any error."""
+    signature_path = Path(__file__).resolve().parent / 'platform_signatures.json'
+    if not signature_path.exists():
+        return DEFAULT_PLATFORM_SIGNATURES
+
+    try:
+        with signature_path.open('r', encoding='utf-8') as handle:
+            loaded = json.load(handle)
+        if isinstance(loaded, dict) and loaded:
+            return loaded
+    except Exception:
+        pass
+    return DEFAULT_PLATFORM_SIGNATURES
+
+
+PLATFORM_SIGNATURES = _load_platform_signatures()
+
+
+def _get_platform_signature(platform: str) -> Dict[str, object]:
+    """Return merged signature for a platform with safe defaults."""
+    fallback = {
+        'conservative_200': False,
+        'not_found_markers': [],
+        'found_markers': []
+    }
+    loaded = PLATFORM_SIGNATURES.get(platform, {})
+    if not isinstance(loaded, dict):
+        return fallback
+
+    signature = {**fallback, **loaded}
+    for key in ('not_found_markers', 'found_markers'):
+        values = signature.get(key, [])
+        if not isinstance(values, list):
+            signature[key] = []
+        else:
+            signature[key] = [str(marker) for marker in values if str(marker).strip()]
+    signature['conservative_200'] = bool(signature.get('conservative_200', False))
+    return signature
 
 
 def generate_username_variants(username: str) -> Dict[str, List[str]]:
@@ -199,6 +244,45 @@ def _decode_response_bytes(raw_bytes: bytes) -> str:
     return text.replace('’', "'").lower()
 
 
+def _normalize_page_text(page_text: str) -> str:
+    """Normalize page text for robust fingerprint-style comparisons."""
+    if not page_text:
+        return ''
+    return ' '.join(page_text.split())
+
+
+def _looks_like_same_page(target_text: str, control_text: str) -> bool:
+    """Return True when two responses look like the same generic page template."""
+    normalized_target = _normalize_page_text(target_text)
+    normalized_control = _normalize_page_text(control_text)
+
+    if not normalized_target or not normalized_control:
+        return False
+
+    if normalized_target == normalized_control:
+        return True
+
+    target_len = len(normalized_target)
+    control_len = len(normalized_control)
+    max_len = max(target_len, control_len)
+    if max_len > 0:
+        divergence = abs(target_len - control_len) / max_len
+        if divergence >= 0.12:
+            return False
+
+    probe_window = TEMPLATE_COMPARE_WINDOW
+    target_window = normalized_target[:probe_window]
+    control_window = normalized_control[:probe_window]
+
+    min_len = min(len(target_window), len(control_window))
+    if min_len < 120:
+        return False
+
+    equal_chars = sum(1 for left, right in zip(target_window, control_window) if left == right)
+    similarity_ratio = equal_chars / min_len
+    return similarity_ratio >= 0.93
+
+
 def _get_cached_result(platform: str, username: str) -> Optional[PlatformCheck]:
     """Return cached result if within TTL."""
     key = (platform, username)
@@ -248,6 +332,28 @@ def _get_transport_opener():
     return _PROXY_OPENER
 
 
+def _probe_once(url: str) -> Tuple[int, str, str]:
+    """Probe URL once and return (status_code, decoded_body, error_string)."""
+    request = Request(url, headers=REQUEST_HEADERS)
+    opener = _get_transport_opener()
+
+    try:
+        with opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            status_code = getattr(response, 'status', 200)
+            body_preview = _decode_response_bytes(response.read(RESPONSE_PREVIEW_BYTES))
+            return status_code, body_preview, ''
+    except HTTPError as error:
+        status_code = int(getattr(error, 'code', 0) or 0)
+        body_preview = ''
+        try:
+            body_preview = _decode_response_bytes(error.read(RESPONSE_PREVIEW_BYTES))
+        except Exception:
+            body_preview = ''
+        return status_code, body_preview, f'http_error_{status_code}'
+    except (URLError, TimeoutError) as error:
+        return 0, '', str(error)
+
+
 def _contains_username_evidence(response_text: str, username: str) -> bool:
     """Return True when response body contains strong evidence of requested username."""
     if not response_text or not username:
@@ -274,6 +380,8 @@ def _classify_response(platform: str, status_code: int, response_text: str, is_v
     Classify platform response into: exists, status_label, confidence, method.
     """
     text = response_text or ''
+    signature = _get_platform_signature(platform)
+    conservative_200 = bool(signature.get('conservative_200', False))
 
     if status_code in (404, 410):
         return False, 'Not Found', 'Low', 'http-status'
@@ -282,32 +390,38 @@ def _classify_response(platform: str, status_code: int, response_text: str, is_v
         return False, 'Uncertain', 'Low', 'rate-limited'
 
     if status_code in (401, 403):
-        if platform in CONSERVATIVE_200_PLATFORMS:
+        if conservative_200:
             return False, 'Uncertain', 'Low', 'auth-gated'
         return True, 'Found', 'Medium', 'http-status'
+
+    if status_code == 999:
+        return False, 'Uncertain', 'Low', 'access-blocked'
+
+    if 400 <= status_code < 500:
+        return False, 'Uncertain', 'Low', 'client-block'
 
     if status_code >= 500:
         return False, 'Uncertain', 'Low', 'server-error'
 
-    markers_not_found = [marker.replace('’', "'").lower() for marker in NOT_FOUND_MARKERS.get(platform, [])]
+    markers_not_found = [marker.replace('’', "'").lower() for marker in signature.get('not_found_markers', [])]
     for marker in markers_not_found:
         if marker and marker in text:
             if platform == 'Telegram' and status_code == 200:
                 break
             return False, 'Not Found', 'Low', 'marker'
 
-    markers_found = [marker.replace('’', "'").lower() for marker in FOUND_MARKERS.get(platform, [])]
+    markers_found = [marker.replace('’', "'").lower() for marker in signature.get('found_markers', [])]
     for marker in markers_found:
         if len(marker.strip()) < 3:
             continue
         if marker and marker in text:
-            if platform in CONSERVATIVE_200_PLATFORMS and not _contains_username_evidence(text, username):
+            if conservative_200 and not _contains_username_evidence(text, username):
                 continue
             confidence = 'High' if not is_variant else 'Medium'
             return True, 'Found', confidence, 'marker'
 
     if status_code == 200:
-        if platform in CONSERVATIVE_200_PLATFORMS:
+        if conservative_200:
             return False, 'Uncertain', 'Low', 'ambiguous-200'
         confidence = 'High' if not is_variant else 'Medium'
         return True, 'Found', confidence, 'http-status'
@@ -334,76 +448,70 @@ def real_platform_check(username: str, platform: str, is_variant: bool = False) 
     last_status_code = 0
 
     for attempt in range(MAX_RETRIES + 1):
-        request = Request(profile_url, headers=REQUEST_HEADERS)
-        opener = _get_transport_opener()
+        status_code, body_preview, probe_error = _probe_once(profile_url)
+        last_status_code = status_code or last_status_code
 
-        try:
-            with opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-                status_code = getattr(response, 'status', 200)
-                body_preview = _decode_response_bytes(response.read(200000))
-                exists, status_label, confidence, method = _classify_response(
-                    platform=platform,
-                    status_code=status_code,
-                    response_text=body_preview,
-                    is_variant=is_variant,
-                    username=username,
-                )
-
-                result = PlatformCheck(
-                    platform=platform,
-                    url=profile_url,
-                    exists=exists,
-                    confidence=confidence,
-                    status=status_label,
-                    http_status=status_code,
-                    response_time_ms=round((time.perf_counter() - start) * 1000, 2),
-                    detection_method=method,
-                    error=''
-                )
-                _set_cached_result(platform, username, result)
-                return result
-
-        except HTTPError as error:
-            status_code = int(getattr(error, 'code', 0) or 0)
-            last_status_code = status_code
-            body_preview = ''
-            try:
-                body_preview = _decode_response_bytes(error.read(100000))
-            except Exception:
-                body_preview = ''
-
-            exists, status_label, confidence, method = _classify_response(
-                platform=platform,
-                status_code=status_code,
-                response_text=body_preview,
-                is_variant=is_variant,
-                username=username,
-            )
-
-            # Retry transient classes only
-            if status_code in (429, 500, 502, 503, 504) and attempt < MAX_RETRIES:
-                time.sleep(BACKOFF_SECONDS * (attempt + 1))
-                continue
-
-            result = PlatformCheck(
-                platform=platform,
-                url=profile_url,
-                exists=exists,
-                confidence=confidence,
-                status=status_label,
-                http_status=status_code,
-                response_time_ms=round((time.perf_counter() - start) * 1000, 2),
-                detection_method=method,
-                error=f'http_error_{status_code}'
-            )
-            _set_cached_result(platform, username, result)
-            return result
-
-        except (URLError, TimeoutError) as error:
-            last_error = str(error)
+        if status_code == 0 and probe_error:
+            last_error = probe_error
             if attempt < MAX_RETRIES:
                 time.sleep(BACKOFF_SECONDS * (attempt + 1))
                 continue
+            break
+
+        exists, status_label, confidence, method = _classify_response(
+            platform=platform,
+            status_code=status_code,
+            response_text=body_preview,
+            is_variant=is_variant,
+            username=username,
+        )
+
+        # Control-probe pass: compare target against a known fake username to
+        # reduce false positives on generic pages (WhatsMyName-style hardening).
+        signature = _get_platform_signature(platform)
+        conservative_200 = bool(signature.get('conservative_200', False))
+        should_control_probe = status_code == 200 and (exists or method == 'ambiguous-200') and conservative_200
+        if should_control_probe:
+            control_username = f'osint_probe_{int(time.time() * 1000)}'
+            control_url = base_url.format(control_username)
+            control_status, control_body, _ = _probe_once(control_url)
+
+            if control_status == 200:
+                same_template = _looks_like_same_page(body_preview, control_body)
+
+                if exists:
+                    if same_template:
+                        exists = False
+                        status_label = 'Uncertain'
+                        confidence = 'Low'
+                        method = 'control-comparison'
+                else:
+                    # For conservative platforms, allow a controlled positive only when
+                    # target differs from control and includes explicit username evidence.
+                    if (not same_template) and _contains_username_evidence(body_preview, username):
+                        exists = True
+                        status_label = 'Found'
+                        confidence = 'Medium' if is_variant else 'High'
+                        method = 'control-comparison-positive'
+
+        # Retry transient classes only
+        if status_code in (429, 500, 502, 503, 504) and attempt < MAX_RETRIES:
+            time.sleep(BACKOFF_SECONDS * (attempt + 1))
+            continue
+
+        result = PlatformCheck(
+            platform=platform,
+            url=profile_url,
+            exists=exists,
+            confidence=confidence,
+            status=status_label,
+            http_status=status_code,
+            response_time_ms=round((time.perf_counter() - start) * 1000, 2),
+            detection_method=method,
+            error=probe_error if probe_error.startswith('http_error_') else ''
+        )
+        _set_cached_result(platform, username, result)
+        return result
 
     result = PlatformCheck(
         platform=platform,

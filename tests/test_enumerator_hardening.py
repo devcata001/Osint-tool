@@ -4,6 +4,21 @@ from engine import enumerator
 
 
 class EnumeratorHardeningTests(unittest.TestCase):
+    def test_control_probe_detects_same_template(self):
+        target = 'welcome to instagram sign up to see photos and videos from your friends'
+        control = 'welcome to instagram sign up to see photos and videos from your friends'
+        self.assertTrue(enumerator._looks_like_same_page(target, control))
+
+    def test_control_probe_distinguishes_different_pages(self):
+        target = 'profile page user details repositories followers following recent activity feed'
+        control = 'error page page is not available sign up to continue generic template'
+        self.assertFalse(enumerator._looks_like_same_page(target, control))
+
+    def test_control_probe_distinguishes_length_divergence(self):
+        target = 'a' * 2000
+        control = 'a' * 1200
+        self.assertFalse(enumerator._looks_like_same_page(target, control))
+
     def test_classify_instagram_ambiguous_200_as_uncertain(self):
         exists, status, confidence, method = enumerator._classify_response(
             platform='Instagram',
