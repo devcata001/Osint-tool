@@ -10,7 +10,7 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, replace
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.request import Request, urlopen, build_opener, ProxyHandler
+from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError, URLError
 
 
@@ -134,8 +134,23 @@ CACHE_TTL_SECONDS = 300
 RESPONSE_PREVIEW_BYTES = 900000
 TEMPLATE_COMPARE_WINDOW = 10000
 
+# Platforms that require browser rendering/session context for reliable detection.
+# In backend-only mode, mark as Unsupported instead of returning low-confidence guesses.
+BROWSER_REQUIRED_PLATFORMS = {'X', 'Instagram', 'LinkedIn', 'Facebook'}
+
 _RESULT_CACHE: Dict[Tuple[str, str], Tuple[float, PlatformCheck]] = {}
 _PROXY_OPENER = None
+
+
+def _is_hybrid_probe_enabled() -> bool:
+    """Return whether hybrid node probe integration is enabled (default: enabled)."""
+    raw_value = os.environ.get('OSINT_ENABLE_HYBRID_PROBES', 'true').strip().lower()
+    return raw_value in {'1', 'true', 'yes', 'on'}
+
+
+def _get_hybrid_probe_url() -> str:
+    """Return hybrid probe endpoint URL."""
+    return os.environ.get('OSINT_HYBRID_PROBE_URL', 'http://127.0.0.1:8787/render').strip()
 
 
 def _load_platform_signatures() -> Dict[str, Dict[str, object]]:
@@ -332,6 +347,71 @@ def _get_transport_opener():
     return _PROXY_OPENER
 
 
+def _is_browser_probe_enabled() -> bool:
+    """Return whether browser probes are enabled (default: enabled)."""
+    raw_value = os.environ.get('OSINT_ENABLE_BROWSER_PROBES', 'true').strip().lower()
+    return raw_value in {'1', 'true', 'yes', 'on'}
+
+
+def _browser_probe_once(url: str) -> Tuple[int, str, str]:
+    """Probe a URL with a real headless browser for JS-rendered platforms."""
+    if _is_hybrid_probe_enabled():
+        hybrid_url = _get_hybrid_probe_url()
+        if hybrid_url:
+            try:
+                payload = json.dumps({'url': url}).encode('utf-8')
+                request = Request(
+                    hybrid_url,
+                    data=payload,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'User-Agent': REQUEST_HEADERS['User-Agent'],
+                    },
+                    method='POST'
+                )
+                opener = _get_transport_opener()
+                with opener.open(request, timeout=max(REQUEST_TIMEOUT_SECONDS, 12)) as response:
+                    status_code = getattr(response, 'status', 200)
+                    body = response.read().decode('utf-8', errors='ignore')
+                    parsed = json.loads(body or '{}')
+                    rendered_status = int(parsed.get('status', 0) or 0)
+                    rendered_content = str(parsed.get('content', '') or '').lower()
+                    if rendered_status > 0:
+                        return rendered_status, rendered_content, ''
+                    return status_code, rendered_content, ''
+            except Exception:
+                pass
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return 0, '', 'browser_engine_unavailable'
+
+    browser = None
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent=REQUEST_HEADERS['User-Agent'],
+                locale='en-US',
+            )
+            page = context.new_page()
+            response = page.goto(url, wait_until='domcontentloaded', timeout=20000)
+            page.wait_for_timeout(1200)
+            content = page.content().lower()
+            status_code = response.status if response is not None else 0
+            return status_code, content, ''
+    except Exception as error:
+        return 0, '', str(error)
+    finally:
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
+
+
 def _probe_once(url: str) -> Tuple[int, str, str]:
     """Probe URL once and return (status_code, decoded_body, error_string)."""
     request = Request(url, headers=REQUEST_HEADERS)
@@ -429,6 +509,75 @@ def _classify_response(platform: str, status_code: int, response_text: str, is_v
     return False, 'Uncertain', 'Low', 'fallback'
 
 
+def _browser_platform_check(username: str, platform: str, base_url: str, is_variant: bool = False) -> Optional[PlatformCheck]:
+    """Run Playwright-based probe for JS-gated platforms and classify with control comparison."""
+    profile_url = base_url.format(username)
+    status_code, body_preview, probe_error = _browser_probe_once(profile_url)
+
+    if probe_error == 'browser_engine_unavailable':
+        return PlatformCheck(
+            platform=platform,
+            url=profile_url,
+            exists=False,
+            confidence='Low',
+            status='Unsupported',
+            http_status=0,
+            response_time_ms=0.0,
+            detection_method='browser-unavailable',
+            error='install_playwright_required'
+        )
+
+    if status_code == 0 and probe_error:
+        return PlatformCheck(
+            platform=platform,
+            url=profile_url,
+            exists=False,
+            confidence='Low',
+            status='Uncertain',
+            http_status=0,
+            response_time_ms=0.0,
+            detection_method='browser-failure',
+            error=probe_error
+        )
+
+    exists, status_label, confidence, method = _classify_response(
+        platform=platform,
+        status_code=status_code,
+        response_text=body_preview,
+        is_variant=is_variant,
+        username=username,
+    )
+
+    control_username = f'osint_probe_{int(time.time() * 1000)}'
+    control_url = base_url.format(control_username)
+    control_status, control_body, _ = _browser_probe_once(control_url)
+
+    if control_status == 200:
+        same_template = _looks_like_same_page(body_preview, control_body)
+        if exists and same_template:
+            exists = False
+            status_label = 'Uncertain'
+            confidence = 'Low'
+            method = 'browser-control-comparison'
+        elif (not exists) and (not same_template) and _contains_username_evidence(body_preview, username):
+            exists = True
+            status_label = 'Found'
+            confidence = 'Medium' if is_variant else 'High'
+            method = 'browser-control-comparison-positive'
+
+    return PlatformCheck(
+        platform=platform,
+        url=profile_url,
+        exists=exists,
+        confidence=confidence,
+        status=status_label,
+        http_status=status_code,
+        response_time_ms=0.0,
+        detection_method=method if method.startswith('browser-') else f'browser-{method}',
+        error=probe_error if probe_error.startswith('http_error_') else ''
+    )
+
+
 def real_platform_check(username: str, platform: str, is_variant: bool = False) -> PlatformCheck:
     """
     Perform real HTTP probing for username existence on a platform.
@@ -438,6 +587,25 @@ def real_platform_check(username: str, platform: str, is_variant: bool = False) 
     platform_config = PLATFORMS.get(platform, {})
     base_url = platform_config.get('url', '')
     profile_url = base_url.format(username)
+
+    if platform in BROWSER_REQUIRED_PLATFORMS:
+        if not _is_browser_probe_enabled():
+            return PlatformCheck(
+                platform=platform,
+                url=profile_url,
+                exists=False,
+                confidence='Low',
+                status='Unsupported',
+                http_status=0,
+                response_time_ms=0.0,
+                detection_method='browser-required',
+                error='browser_verification_required'
+            )
+
+        browser_result = _browser_platform_check(username, platform, base_url, is_variant=is_variant)
+        if browser_result is not None:
+            _set_cached_result(platform, username, browser_result)
+            return browser_result
 
     cached = _get_cached_result(platform, username)
     if cached is not None:
@@ -561,6 +729,7 @@ def check_username_across_platforms(
             'found_count': 0,
             'not_found_count': 0,
             'uncertain_count': 0,
+            'unsupported_count': 0,
             'cache_hits': 0,
             'network_errors': 0,
             'avg_response_time_ms': 0.0,
@@ -616,6 +785,8 @@ def check_username_across_platforms(
             results['summary']['found_count'] += 1
         elif status == 'Uncertain':
             results['summary']['uncertain_count'] += 1
+        elif status == 'Unsupported':
+            results['summary']['unsupported_count'] += 1
         else:
             results['summary']['not_found_count'] += 1
 

@@ -130,6 +130,7 @@ function renderSummary(data) {
         const confidenceScore = typeof data.confidence_score === 'number' ? data.confidence_score : 0;
         const riskSummary = data.risk_summary || 'Unknown';
         const uncertainCount = summary.uncertain_count || 0;
+        const unsupportedCount = summary.unsupported_count || 0;
         const avgResponseTimeMs = summary.avg_response_time_ms || 0;
         const proxyEnabled = Boolean(summary.proxy_enabled);
         summaryHTML += `
@@ -152,6 +153,10 @@ function renderSummary(data) {
             <div class="summary-row">
                 <span class="summary-label">Uncertain Checks</span>
                 <span class="summary-value ${uncertainCount > 0 ? 'warning' : 'success'}">${uncertainCount}</span>
+            </div>
+            <div class="summary-row">
+                <span class="summary-label">Unsupported Checks</span>
+                <span class="summary-value ${unsupportedCount > 0 ? 'warning' : 'success'}">${unsupportedCount}</span>
             </div>
             <div class="summary-row">
                 <span class="summary-label">Avg Probe Time</span>
@@ -212,7 +217,9 @@ function renderResultsTable(data) {
                 ? 'badge-success'
                 : statusText === 'Uncertain'
                     ? 'badge-warning'
-                    : 'badge-low';
+                    : statusText === 'Unsupported'
+                        ? 'badge-warning'
+                        : 'badge-low';
             const confidenceClass = `badge-${String(result.confidence || 'low').toLowerCase()}`;
             const linkHtml = `<a href="${result.url}" target="_blank" rel="noopener noreferrer" class="platform-link">Open Profile →</a>`;
             const httpStatus = result.http_status || 0;

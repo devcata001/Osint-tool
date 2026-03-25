@@ -1,0 +1,14 @@
+{
+  "name": "osint-hybrid-probe",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node/Express Playwright probe service for JS-gated profile checks",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "playwright": "^1.53.0"
+  }
+}

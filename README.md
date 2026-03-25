@@ -115,6 +115,46 @@ Each platform supports:
 
 This keeps checks data-driven and allows quick accuracy tuning per platform without changing Python code.
 
+## Browser Probe Stack (for X/Instagram/LinkedIn/Facebook)
+
+Some platforms are JS-gated and cannot be verified reliably with plain server-side HTTP requests.
+
+This project now supports browser-rendered probes using Playwright.
+
+Enable/disable:
+
+- `OSINT_ENABLE_BROWSER_PROBES=true` (default)
+- `OSINT_ENABLE_BROWSER_PROBES=false` to force `Unsupported` for browser-required platforms
+
+Install browser runtime after dependencies:
+
+```bash
+python -m playwright install chromium
+```
+
+Without the Playwright browser runtime, those platforms return `Unsupported` with method `browser-unavailable` instead of misleading results.
+
+### Hybrid Node Probe (recommended for JS-gated platforms)
+
+This project supports a hybrid probe service using Node + Express + Playwright in [hybrid-probe/package.json](hybrid-probe/package.json).
+
+Run it in a second terminal:
+
+```bash
+cd hybrid-probe
+npm install
+npx playwright install chromium
+npm start
+```
+
+Then run Flask normally. The Python backend will call the Node probe endpoint automatically (default: `http://127.0.0.1:8787/render`).
+
+Environment flags:
+
+- `OSINT_ENABLE_HYBRID_PROBES=true|false` (default: `true`)
+- `OSINT_HYBRID_PROBE_URL=http://127.0.0.1:8787/render`
+- `OSINT_ENABLE_BROWSER_PROBES=true|false` (fallback to Python Playwright when hybrid is unavailable)
+
 Or with environment configuration:
 
 ```bash

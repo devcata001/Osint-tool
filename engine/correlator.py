@@ -27,7 +27,7 @@ def score_username_results(username_check: Dict) -> Dict:
     # Always include original platform checks for visibility
     for result in username_check.get('original', []):
         raw_status = result.get('status', 'Not Found')
-        normalized_status = raw_status if raw_status in ('Found', 'Not Found', 'Uncertain') else 'Not Found'
+        normalized_status = raw_status if raw_status in ('Found', 'Not Found', 'Uncertain', 'Unsupported') else 'Not Found'
         confidence_score = {
             'High': 0.95,
             'Medium': 0.70,
@@ -36,6 +36,8 @@ def score_username_results(username_check: Dict) -> Dict:
 
         if normalized_status == 'Uncertain':
             confidence_score = min(confidence_score, 0.35)
+        elif normalized_status == 'Unsupported':
+            confidence_score = 0.1
         elif not result.get('exists', False):
             confidence_score = 0.2
 
@@ -50,6 +52,7 @@ def score_username_results(username_check: Dict) -> Dict:
             'is_variant': False,
             'annotation': (
                 'Exact match' if normalized_status == 'Found'
+                else 'Browser verification required' if normalized_status == 'Unsupported'
                 else 'Uncertain check result' if normalized_status == 'Uncertain'
                 else 'Not found'
             ),
@@ -103,6 +106,7 @@ def score_username_results(username_check: Dict) -> Dict:
     
     # Generate recommendations
     uncertain_results = [row for row in scored_results['results'] if row.get('status') == 'Uncertain']
+    unsupported_results = [row for row in scored_results['results'] if row.get('status') == 'Unsupported']
     if found_results:
         scored_results['recommendations'] = [
             'Account found on multiple platforms',
@@ -111,11 +115,13 @@ def score_username_results(username_check: Dict) -> Dict:
         ]
         if uncertain_results:
             scored_results['recommendations'].append('Some platforms were uncertain due to transient/network/rate-limit conditions; retry for confirmation')
+        if unsupported_results:
+            scored_results['recommendations'].append('Some platforms require browser-based verification; current backend mode does not claim a definitive result there')
     else:
-        if uncertain_results:
+        if uncertain_results or unsupported_results:
             scored_results['recommendations'] = [
                 'No confirmed username matches yet',
-                'Some checks were uncertain; retry in a few minutes for higher confidence'
+                'Some checks were uncertain or unsupported in backend-only mode; use browser verification for final confirmation'
             ]
         else:
             scored_results['recommendations'] = [
