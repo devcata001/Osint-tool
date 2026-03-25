@@ -3,7 +3,6 @@ Username enumerator - checks for username existence across platforms.
 Provides resilient, production-oriented probing with retries and classification.
 """
 
-import re
 import time
 import os
 from typing import List, Dict, Tuple, Optional
@@ -191,58 +190,6 @@ def generate_username_variants(username: str) -> Dict[str, List[str]]:
     }
 
 
-def simulate_platform_check(username: str, platform: str, is_variant: bool = False) -> PlatformCheck:
-    """
-    Simulate platform check (in production, would make actual HTTP requests).
-    
-    For demo purposes, returns probabilistic results based on username patterns.
-    
-    Args:
-        username: Username to check
-        platform: Platform name
-        is_variant: Whether checking a variant
-        
-    Returns:
-        PlatformCheck result object
-    """
-    platform_config = PLATFORMS.get(platform, {})
-    base_url = platform_config.get('url', '')
-    
-    # Simulated existence check - in production would:
-    # 1. Make HTTP HEAD/GET request
-    # 2. Check for 404/200 status codes
-    # 3. Validate response patterns for false positives
-    
-    # Demo logic: longer, alphanumeric usernames are more likely to exist
-    exists = False
-    confidence = 'Low'
-    
-    # Heuristic: original usernames are more likely on all platforms
-    if not is_variant:
-        # Check for common name patterns (simplified demo)
-        if len(username) >= 4 and re.match(r'^[a-z0-9_]+$', username.lower()):
-            confidence = 'Medium'
-            exists = hash(username + platform) % 100 > 60  # Simulated: 40% exist
-        else:
-            confidence = 'Low'
-    else:
-        # Variants are less likely to exist
-        confidence = 'Low'
-        exists = hash(username + platform) % 100 > 85  # Simulated: 15% exist
-    
-    if exists:
-        confidence = 'High' if not is_variant else 'Medium'
-    
-    return PlatformCheck(
-        platform=platform,
-        url=base_url.format(username),
-        exists=exists,
-        confidence=confidence,
-        status='Found' if exists else 'Not Found',
-        detection_method='simulated'
-    )
-
-
 def _decode_response_bytes(raw_bytes: bytes) -> str:
     """Decode response bytes safely for marker-based checks."""
     try:
@@ -301,7 +248,28 @@ def _get_transport_opener():
     return _PROXY_OPENER
 
 
-def _classify_response(platform: str, status_code: int, response_text: str, is_variant: bool) -> Tuple[bool, str, str, str]:
+def _contains_username_evidence(response_text: str, username: str) -> bool:
+    """Return True when response body contains strong evidence of requested username."""
+    if not response_text or not username:
+        return False
+
+    text = response_text.lower()
+    username_lower = username.lower()
+
+    candidates = {
+        username_lower,
+        username_lower.replace('_', ''),
+        username_lower.replace('.', ''),
+    }
+
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if len(candidate) >= 3 and candidate in text:
+            return True
+    return False
+
+
+def _classify_response(platform: str, status_code: int, response_text: str, is_variant: bool, username: str = '') -> Tuple[bool, str, str, str]:
     """
     Classify platform response into: exists, status_label, confidence, method.
     """
@@ -314,6 +282,8 @@ def _classify_response(platform: str, status_code: int, response_text: str, is_v
         return False, 'Uncertain', 'Low', 'rate-limited'
 
     if status_code in (401, 403):
+        if platform in CONSERVATIVE_200_PLATFORMS:
+            return False, 'Uncertain', 'Low', 'auth-gated'
         return True, 'Found', 'Medium', 'http-status'
 
     if status_code >= 500:
@@ -331,6 +301,8 @@ def _classify_response(platform: str, status_code: int, response_text: str, is_v
         if len(marker.strip()) < 3:
             continue
         if marker and marker in text:
+            if platform in CONSERVATIVE_200_PLATFORMS and not _contains_username_evidence(text, username):
+                continue
             confidence = 'High' if not is_variant else 'Medium'
             return True, 'Found', confidence, 'marker'
 
@@ -373,7 +345,8 @@ def real_platform_check(username: str, platform: str, is_variant: bool = False) 
                     platform=platform,
                     status_code=status_code,
                     response_text=body_preview,
-                    is_variant=is_variant
+                    is_variant=is_variant,
+                    username=username,
                 )
 
                 result = PlatformCheck(
@@ -403,7 +376,8 @@ def real_platform_check(username: str, platform: str, is_variant: bool = False) 
                 platform=platform,
                 status_code=status_code,
                 response_text=body_preview,
-                is_variant=is_variant
+                is_variant=is_variant,
+                username=username,
             )
 
             # Retry transient classes only
@@ -498,8 +472,18 @@ def check_username_across_platforms(
             platform = future_by_platform[future]
             try:
                 platform_result_map[platform] = future.result()
-            except Exception:
-                platform_result_map[platform] = simulate_platform_check(username, platform, is_variant=False)
+            except Exception as error:
+                platform_result_map[platform] = PlatformCheck(
+                    platform=platform,
+                    url=PLATFORMS.get(platform, {}).get('url', '').format(username),
+                    exists=False,
+                    confidence='Low',
+                    status='Uncertain',
+                    http_status=0,
+                    response_time_ms=0.0,
+                    detection_method='internal-error',
+                    error=f'internal_error:{type(error).__name__}'
+                )
 
     for platform in platforms_to_check:
         result = platform_result_map[platform]
@@ -536,19 +520,45 @@ def check_username_across_platforms(
     # Check variants (optional, limits to reduce noise)
     if check_variants:
         variant_limit = min(5, len(variant_info['variants']) - 1)  # Check up to 5 variants
+        variant_targets = []
         for variant in variant_info['variants'][1:variant_limit + 1]:
             for platform in platforms_to_check[:3]:  # Check variants on top 3 platforms
-                result = simulate_platform_check(variant, platform, is_variant=True)
-                if result.exists:  # Only include if found
-                    results['variants'].append({
-                        'platform': result.platform,
-                        'username': variant,
-                        'url': result.url,
-                        'exists': True,
-                        'confidence': result.confidence
-                    })
-                    results['summary']['matches_found'] += 1
-                results['summary']['total_checks'] += 1
+                variant_targets.append((variant, platform))
+
+        if variant_targets:
+            with ThreadPoolExecutor(max_workers=min(8, len(variant_targets))) as executor:
+                future_by_target = {
+                    executor.submit(real_platform_check, variant, platform, True): (variant, platform)
+                    for (variant, platform) in variant_targets
+                }
+
+                for future in as_completed(future_by_target):
+                    variant, platform = future_by_target[future]
+                    results['summary']['total_checks'] += 1
+                    try:
+                        result = future.result()
+                    except Exception as error:
+                        result = PlatformCheck(
+                            platform=platform,
+                            url=PLATFORMS.get(platform, {}).get('url', '').format(variant),
+                            exists=False,
+                            confidence='Low',
+                            status='Uncertain',
+                            http_status=0,
+                            response_time_ms=0.0,
+                            detection_method='internal-error',
+                            error=f'internal_error:{type(error).__name__}'
+                        )
+
+                    if result.exists:  # Only include found variants for concise output
+                        results['variants'].append({
+                            'platform': result.platform,
+                            'username': variant,
+                            'url': result.url,
+                            'exists': True,
+                            'confidence': result.confidence
+                        })
+                        results['summary']['matches_found'] += 1
 
     response_times = [row.get('response_time_ms', 0.0) for row in results['original'] if row.get('response_time_ms', 0.0) > 0]
     if response_times:
