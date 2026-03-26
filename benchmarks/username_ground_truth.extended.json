@@ -1,0 +1,42 @@
+[
+  {"platform":"GitHub","username":"torvalds","expected_exists":true,"notes":"Known account"},
+  {"platform":"GitHub","username":"microsoft","expected_exists":true,"notes":"Known org account"},
+  {"platform":"GitHub","username":"google","expected_exists":true,"notes":"Known org account"},
+  {"platform":"GitHub","username":"osint_probe_not_real_gh_001","expected_exists":false,"notes":"Control negative"},
+  {"platform":"GitHub","username":"osint_probe_not_real_gh_002","expected_exists":false,"notes":"Control negative"},
+
+  {"platform":"HackerNews","username":"pg","expected_exists":true,"notes":"Known HN user"},
+  {"platform":"HackerNews","username":"dang","expected_exists":true,"notes":"Known HN user"},
+  {"platform":"HackerNews","username":"osint_probe_not_real_hn_001","expected_exists":false,"notes":"Control negative"},
+  {"platform":"HackerNews","username":"osint_probe_not_real_hn_002","expected_exists":false,"notes":"Control negative"},
+
+  {"platform":"Reddit","username":"spez","expected_exists":true,"notes":"Known reddit account"},
+  {"platform":"Reddit","username":"kn0thing","expected_exists":true,"notes":"Known reddit account"},
+  {"platform":"Reddit","username":"osint_probe_not_real_rd_001","expected_exists":false,"notes":"Control negative"},
+  {"platform":"Reddit","username":"osint_probe_not_real_rd_002","expected_exists":false,"notes":"Control negative"},
+
+  {"platform":"Telegram","username":"durov","expected_exists":true,"notes":"Known telegram account"},
+  {"platform":"Telegram","username":"telegram","expected_exists":true,"notes":"Known telegram account"},
+  {"platform":"Telegram","username":"osint_probe_not_real_tg_001","expected_exists":false,"notes":"Control negative"},
+  {"platform":"Telegram","username":"osint_probe_not_real_tg_002","expected_exists":false,"notes":"Control negative"},
+
+  {"platform":"X","username":"elonmusk","expected_exists":true,"notes":"Known X account (JS-gated)"},
+  {"platform":"X","username":"github","expected_exists":true,"notes":"Known X account (JS-gated)"},
+  {"platform":"X","username":"osint_probe_not_real_x_001","expected_exists":false,"notes":"Control negative"},
+  {"platform":"X","username":"osint_probe_not_real_x_002","expected_exists":false,"notes":"Control negative"},
+
+  {"platform":"Instagram","username":"instagram","expected_exists":true,"notes":"Known Instagram account (JS-gated)"},
+  {"platform":"Instagram","username":"natgeo","expected_exists":true,"notes":"Known Instagram account (JS-gated)"},
+  {"platform":"Instagram","username":"osint_probe_not_real_ig_001","expected_exists":false,"notes":"Control negative"},
+  {"platform":"Instagram","username":"osint_probe_not_real_ig_002","expected_exists":false,"notes":"Control negative"},
+
+  {"platform":"LinkedIn","username":"bill-gates","expected_exists":true,"notes":"Known LinkedIn profile slug (often blocked)"},
+  {"platform":"LinkedIn","username":"satyanadella","expected_exists":true,"notes":"Known LinkedIn profile slug (often blocked)"},
+  {"platform":"LinkedIn","username":"osint_probe_not_real_li_001","expected_exists":false,"notes":"Control negative"},
+  {"platform":"LinkedIn","username":"osint_probe_not_real_li_002","expected_exists":false,"notes":"Control negative"},
+
+  {"platform":"Facebook","username":"zuck","expected_exists":true,"notes":"Known Facebook profile slug (often blocked)"},
+  {"platform":"Facebook","username":"facebook","expected_exists":true,"notes":"Known Facebook page/account slug (often blocked)"},
+  {"platform":"Facebook","username":"osint_probe_not_real_fb_001","expected_exists":false,"notes":"Control negative"},
+  {"platform":"Facebook","username":"osint_probe_not_real_fb_002","expected_exists":false,"notes":"Control negative"}
+]

@@ -171,6 +171,57 @@ pytest test_api.py
 pytest --cov=. --cov-report=html
 ```
 
+### Accuracy Benchmark (Score /10)
+
+Run the benchmark runner against a ground-truth username set:
+
+```bash
+python tools/benchmark_accuracy.py \
+    --dataset benchmarks/username_ground_truth.sample.json
+```
+
+Extended benchmark set (closer to production reality):
+
+```bash
+python tools/benchmark_accuracy.py \
+    --dataset benchmarks/username_ground_truth.extended.json
+```
+
+Quick smoke run:
+
+```bash
+python tools/benchmark_accuracy.py --max-cases 2
+```
+
+Platform-specific run:
+
+```bash
+python tools/benchmark_accuracy.py --platform GitHub --platform HackerNews
+```
+
+Export report JSON:
+
+```bash
+python tools/benchmark_accuracy.py \
+    --output benchmarks/reports/latest.json
+```
+
+CI-style quality gate (fail build under target):
+
+```bash
+python tools/benchmark_accuracy.py \
+    --dataset benchmarks/username_ground_truth.extended.json \
+    --fail-below 8.5 \
+    --max-abstain-rate 0.15
+```
+
+Scoring model:
+
+- `Found` => positive prediction
+- `Not Found` => negative prediction
+- `Uncertain` / `Unsupported` => abstain (counts against coverage)
+- Final score is `10 * F1 * coverage`
+
 ## Manual Testing
 
 ### Browser Testing

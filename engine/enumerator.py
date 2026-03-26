@@ -153,6 +153,14 @@ def _get_hybrid_probe_url() -> str:
     return os.environ.get('OSINT_HYBRID_PROBE_URL', 'http://127.0.0.1:8787/render').strip()
 
 
+def _get_hybrid_deterministic_probe_url() -> str:
+    """Return deterministic hybrid probe endpoint URL."""
+    raw = _get_hybrid_probe_url()
+    if raw.endswith('/render'):
+        return raw[:-7] + '/probe'
+    return raw.rstrip('/') + '/probe'
+
+
 def _load_platform_signatures() -> Dict[str, Dict[str, object]]:
     """Load signature definitions from JSON; fall back to defaults on any error."""
     signature_path = Path(__file__).resolve().parent / 'platform_signatures.json'
@@ -412,6 +420,59 @@ def _browser_probe_once(url: str) -> Tuple[int, str, str]:
                 pass
 
 
+def _hybrid_deterministic_platform_check(username: str, platform: str, profile_url: str, is_variant: bool = False) -> Optional[PlatformCheck]:
+    """Use hybrid service deterministic verdict endpoint when available."""
+    if not _is_hybrid_probe_enabled():
+        return None
+
+    endpoint = _get_hybrid_deterministic_probe_url()
+    payload = json.dumps({
+        'url': profile_url,
+        'platform': platform,
+        'username': username,
+    }).encode('utf-8')
+
+    try:
+        request = Request(
+            endpoint,
+            data=payload,
+            headers={
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'User-Agent': REQUEST_HEADERS['User-Agent'],
+            },
+            method='POST'
+        )
+        opener = _get_transport_opener()
+        with opener.open(request, timeout=max(REQUEST_TIMEOUT_SECONDS, 20)) as response:
+            body = response.read().decode('utf-8', errors='ignore')
+            parsed = json.loads(body or '{}')
+            verdict = parsed.get('verdict', {}) if isinstance(parsed, dict) else {}
+            if not isinstance(verdict, dict) or not verdict:
+                return None
+
+            status_label = str(verdict.get('status', 'Uncertain') or 'Uncertain')
+            exists = bool(verdict.get('exists', False))
+            confidence = str(verdict.get('confidence', 'Low') or 'Low')
+            method = str(verdict.get('method', 'hybrid-deterministic') or 'hybrid-deterministic')
+            error = str(verdict.get('error', '') or '')
+            http_status = int(parsed.get('targetStatus', 0) or 0) if isinstance(parsed, dict) else 0
+
+            return PlatformCheck(
+                platform=platform,
+                url=profile_url,
+                exists=exists,
+                confidence=confidence,
+                status=status_label,
+                http_status=http_status,
+                response_time_ms=0.0,
+                detection_method=method,
+                error=error,
+            )
+    except Exception:
+        return None
+
+
 def _probe_once(url: str) -> Tuple[int, str, str]:
     """Probe URL once and return (status_code, decoded_body, error_string)."""
     request = Request(url, headers=REQUEST_HEADERS)
@@ -512,6 +573,16 @@ def _classify_response(platform: str, status_code: int, response_text: str, is_v
 def _browser_platform_check(username: str, platform: str, base_url: str, is_variant: bool = False) -> Optional[PlatformCheck]:
     """Run Playwright-based probe for JS-gated platforms and classify with control comparison."""
     profile_url = base_url.format(username)
+
+    deterministic = _hybrid_deterministic_platform_check(
+        username=username,
+        platform=platform,
+        profile_url=profile_url,
+        is_variant=is_variant,
+    )
+    if deterministic is not None:
+        return deterministic
+
     status_code, body_preview, probe_error = _browser_probe_once(profile_url)
 
     if probe_error == 'browser_engine_unavailable':
@@ -559,6 +630,11 @@ def _browser_platform_check(username: str, platform: str, base_url: str, is_vari
             status_label = 'Uncertain'
             confidence = 'Low'
             method = 'browser-control-comparison'
+        elif (not exists) and same_template and (not _contains_username_evidence(body_preview, username)):
+            exists = False
+            status_label = 'Not Found'
+            confidence = 'Medium' if is_variant else 'High'
+            method = 'browser-control-comparison-negative'
         elif (not exists) and (not same_template) and _contains_username_evidence(body_preview, username):
             exists = True
             status_label = 'Found'

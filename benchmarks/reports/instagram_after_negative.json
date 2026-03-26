@@ -1,0 +1,76 @@
+{
+  "overall": {
+    "total": 4,
+    "covered": 2,
+    "abstain": 2,
+    "tp": 2,
+    "fp": 0,
+    "tn": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "accuracy": 1.0,
+    "coverage": 0.5,
+    "f1": 1.0,
+    "score_10": 5.0
+  },
+  "platforms": {
+    "Instagram": {
+      "total": 4,
+      "covered": 2,
+      "abstain": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "accuracy": 1.0,
+      "coverage": 0.5,
+      "f1": 1.0,
+      "score_10": 5.0
+    }
+  },
+  "cases": [
+    {
+      "platform": "Instagram",
+      "username": "instagram",
+      "expected_exists": true,
+      "predicted_exists": true,
+      "status": "Found",
+      "detection_method": "browser-marker",
+      "http_status": 200,
+      "error": ""
+    },
+    {
+      "platform": "Instagram",
+      "username": "natgeo",
+      "expected_exists": true,
+      "predicted_exists": true,
+      "status": "Found",
+      "detection_method": "browser-marker",
+      "http_status": 200,
+      "error": ""
+    },
+    {
+      "platform": "Instagram",
+      "username": "osint_probe_not_real_ig_001",
+      "expected_exists": false,
+      "predicted_exists": null,
+      "status": "Uncertain",
+      "detection_method": "browser-control-comparison",
+      "http_status": 200,
+      "error": ""
+    },
+    {
+      "platform": "Instagram",
+      "username": "osint_probe_not_real_ig_002",
+      "expected_exists": false,
+      "predicted_exists": null,
+      "status": "Uncertain",
+      "detection_method": "browser-control-comparison",
+      "http_status": 200,
+      "error": ""
+    }
+  ]
+}

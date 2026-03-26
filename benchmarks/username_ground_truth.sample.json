@@ -1,0 +1,38 @@
+[
+  {
+    "platform": "GitHub",
+    "username": "torvalds",
+    "expected_exists": true,
+    "notes": "Linux creator account"
+  },
+  {
+    "platform": "GitHub",
+    "username": "osint_probe_definitely_not_real_123456",
+    "expected_exists": false,
+    "notes": "Control negative"
+  },
+  {
+    "platform": "HackerNews",
+    "username": "pg",
+    "expected_exists": true,
+    "notes": "Known HN user"
+  },
+  {
+    "platform": "HackerNews",
+    "username": "osint_probe_definitely_not_real_123456",
+    "expected_exists": false,
+    "notes": "Control negative"
+  },
+  {
+    "platform": "X",
+    "username": "cat3lyst",
+    "expected_exists": true,
+    "notes": "Example from field test; requires browser-capable verification path"
+  },
+  {
+    "platform": "Instagram",
+    "username": "cat3lyst",
+    "expected_exists": true,
+    "notes": "Example from field test; requires browser-capable verification path"
+  }
+]
