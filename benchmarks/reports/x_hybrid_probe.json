@@ -1,0 +1,76 @@
+{
+  "overall": {
+    "total": 4,
+    "covered": 1,
+    "abstain": 3,
+    "tp": 0,
+    "fp": 1,
+    "tn": 0,
+    "fn": 0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "accuracy": 0.0,
+    "coverage": 0.25,
+    "f1": 0.0,
+    "score_10": 0.0
+  },
+  "platforms": {
+    "X": {
+      "total": 4,
+      "covered": 1,
+      "abstain": 3,
+      "tp": 0,
+      "fp": 1,
+      "tn": 0,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "accuracy": 0.0,
+      "coverage": 0.25,
+      "f1": 0.0,
+      "score_10": 0.0
+    }
+  },
+  "cases": [
+    {
+      "platform": "X",
+      "username": "elonmusk",
+      "expected_exists": true,
+      "predicted_exists": null,
+      "status": "Unsupported",
+      "detection_method": "hybrid-js-gated",
+      "http_status": 200,
+      "error": "browser_verification_non_deterministic"
+    },
+    {
+      "platform": "X",
+      "username": "github",
+      "expected_exists": true,
+      "predicted_exists": null,
+      "status": "Unsupported",
+      "detection_method": "hybrid-js-gated",
+      "http_status": 200,
+      "error": "browser_verification_non_deterministic"
+    },
+    {
+      "platform": "X",
+      "username": "osint_probe_not_real_x_001",
+      "expected_exists": false,
+      "predicted_exists": true,
+      "status": "Found",
+      "detection_method": "hybrid-handle-evidence",
+      "http_status": 200,
+      "error": ""
+    },
+    {
+      "platform": "X",
+      "username": "osint_probe_not_real_x_002",
+      "expected_exists": false,
+      "predicted_exists": null,
+      "status": "Uncertain",
+      "detection_method": "browser-ambiguous-200",
+      "http_status": 200,
+      "error": ""
+    }
+  ]
+}

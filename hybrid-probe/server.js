@@ -59,11 +59,6 @@ function evaluateDeterministicVerdict({ platform, username, targetContent, contr
             return { status: 'Not Found', exists: false, confidence: 'High', method: 'hybrid-not-found-marker' };
         }
 
-        const mention = lowerUsername.length > 2 ? `@${lowerUsername}` : '';
-        if (mention && target.includes(mention) && !control.includes(mention)) {
-            return { status: 'Found', exists: true, confidence: 'Medium', method: 'hybrid-handle-evidence' };
-        }
-
         return {
             status: 'Unsupported',
             exists: false,

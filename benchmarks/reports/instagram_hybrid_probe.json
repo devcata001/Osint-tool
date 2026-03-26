@@ -1,0 +1,76 @@
+{
+  "overall": {
+    "total": 4,
+    "covered": 4,
+    "abstain": 0,
+    "tp": 2,
+    "fp": 0,
+    "tn": 2,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "accuracy": 1.0,
+    "coverage": 1.0,
+    "f1": 1.0,
+    "score_10": 10.0
+  },
+  "platforms": {
+    "Instagram": {
+      "total": 4,
+      "covered": 4,
+      "abstain": 0,
+      "tp": 2,
+      "fp": 0,
+      "tn": 2,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "accuracy": 1.0,
+      "coverage": 1.0,
+      "f1": 1.0,
+      "score_10": 10.0
+    }
+  },
+  "cases": [
+    {
+      "platform": "Instagram",
+      "username": "instagram",
+      "expected_exists": true,
+      "predicted_exists": true,
+      "status": "Found",
+      "detection_method": "browser-marker",
+      "http_status": 200,
+      "error": ""
+    },
+    {
+      "platform": "Instagram",
+      "username": "natgeo",
+      "expected_exists": true,
+      "predicted_exists": true,
+      "status": "Found",
+      "detection_method": "hybrid-profile-token",
+      "http_status": 200,
+      "error": ""
+    },
+    {
+      "platform": "Instagram",
+      "username": "osint_probe_not_real_ig_001",
+      "expected_exists": false,
+      "predicted_exists": false,
+      "status": "Not Found",
+      "detection_method": "hybrid-profile-token",
+      "http_status": 200,
+      "error": ""
+    },
+    {
+      "platform": "Instagram",
+      "username": "osint_probe_not_real_ig_002",
+      "expected_exists": false,
+      "predicted_exists": false,
+      "status": "Not Found",
+      "detection_method": "hybrid-profile-token",
+      "http_status": 200,
+      "error": ""
+    }
+  ]
+}
